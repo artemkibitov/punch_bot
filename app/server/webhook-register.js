@@ -18,4 +18,3 @@ export async function registerTelegramWebhook(bot) {
 
   console.log('✅ Webhook registered:', url);
 }
-†
