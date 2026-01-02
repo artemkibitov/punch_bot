@@ -13,6 +13,8 @@ services:
     build: .
     restart: always
     environment:
+      WEBHOOK_PATH: ${WEBHOOK_PATH}
+      BOT_TOKEN: ${BOT_TOKEN}
       NODE_ENV: ${NODE_ENV}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
