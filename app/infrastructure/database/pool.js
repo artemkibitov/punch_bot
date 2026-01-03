@@ -1,0 +1,24 @@
+import pg from 'pg';
+import { env } from '../config/env.js';
+
+const { Pool } = pg;
+
+let pool;
+
+export function getPool() {
+  if (!pool) {
+    pool = new Pool({
+      connectionString: env.DATABASE_URL,
+      max: 10,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 5_000
+    });
+
+    pool.on('error', (err) => {
+      console.error('Postgres pool error:', err);
+      pool = null;
+    });
+  }
+
+  return pool;
+}

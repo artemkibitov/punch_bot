@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "start": "node app/main.js",
-    "dev": "node --watch app/main.js"
+    "dev": "node --watch app/main.js",
+    "migrate": "node scripts/migrate.js",
+    "rollback": "node scripts/rollback.js"
   },
   "dependencies": {
     "pg": "^8.13.0",

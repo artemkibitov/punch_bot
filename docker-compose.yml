@@ -6,6 +6,8 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5433:${DB_PORT}"
     volumes:
       - db_data:/var/lib/postgresql/data
 
@@ -13,6 +15,8 @@ services:
     build: .
     restart: always
     environment:
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      DATABASE_URL: ${DATABASE_URL}
       WEBHOOK_PATH: ${WEBHOOK_PATH}
       BOT_TOKEN: ${BOT_TOKEN}
       NODE_ENV: ${NODE_ENV}
