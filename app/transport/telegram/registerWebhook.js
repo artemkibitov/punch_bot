@@ -1,7 +1,6 @@
 import { env } from '../../infrastructure/config/env.js';
-import { bot } from './bot.js';
 
-export async function registerTelegramWebhook() {
+export async function registerTelegramWebhook(bot) {
   if (env.NODE_ENV !== 'dev') return;
 
   if (!env.NGROK_PUBLIC_URL) {

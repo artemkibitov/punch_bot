@@ -13,7 +13,7 @@ import { registerTelegramWebhook } from './transport/telegram/registerWebhook.js
 // регистрируют handlers, input, callbacks и т.д.
 import { bot } from './transport/telegram/bot.js';
 // дальше будут добавляться новые registrations
-import './transport/telegram/registerHandlers.js';
+import './transport/telegram/input/register.js';
 
 async function bootstrap() {
   const fastify = Fastify({

@@ -14,23 +14,52 @@ export class DialogService {
 
     return session;
   }
-
-  async setState(session, nextState) {
+  async setState(session, nextState, options = {}) {
+    const { force = false } = options;
     const currentState = session.state;
 
-    if (!canTransition(currentState, nextState)) {
+    // 1. 🔁 Идемпотентность: если состояние уже совпадает, ничего не делаем
+    if (currentState === nextState) {
+      return session;
+    }
+
+    // 2. 🔓 Проверка перехода
+    // Если не форсировано (force) и переход запрещен схемой — выбрасываем ошибку
+    if (!force && !canTransition(currentState, nextState)) {
       throw new Error(
         `Invalid FSM transition: ${currentState} -> ${nextState}`
       );
     }
 
+    // 3. 💾 Сохранение в БД
+    // Используем ваш репозиторий для обновления
     await this.sessions.updateState(session.id, nextState);
 
-    return {
-      ...session,
-      state: nextState
-    };
+    // 4. 🔄 Обновляем объект сессии "на лету" (чтобы в ctx.state он уже был новым)
+    session.state = nextState;
+
+    return { ...session, data: nextState };
   }
+
+  async reset(session) {
+    await this.sessions.updateState(session.id, null, session.state);
+  }
+  // async setState(session, nextState) {
+  //   const currentState = session.state;
+
+  //   if (!canTransition(currentState, nextState)) {
+  //     throw new Error(
+  //       `Invalid FSM transition: ${currentState} -> ${nextState}`
+  //     );
+  //   }
+
+  //   await this.sessions.updateState(session.id, nextState);
+
+  //   return {
+  //     ...session,
+  //     state: nextState
+  //   };
+  // }
 
   async clearState(session) {
     await this.sessions.updateState(session.id, null);

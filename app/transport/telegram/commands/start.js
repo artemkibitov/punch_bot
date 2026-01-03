@@ -1,36 +1,29 @@
 import { STATES } from '../../../domain/fsm/states.js';
-import { EmployeeRepository } from '../../../infrastructure/repositories/employeeRepository.js';
-import { managerMenu } from '../ui/menus.js';
-import { pinKeyboard } from '../ui/pinKeyboard.js';
+import { resolveStartFlow } from '../../../application/start/resolveStartFlow.js';
 
-const employeeRepository = new EmployeeRepository();
+export async function startCommand(ctx) {
+  const { dialog, session } = ctx.state;
 
-export function registerStartCommand(bot) {
-  bot.start(async (ctx) => {
-    const telegramUserId = ctx.from.id;
-    const { dialog, session } = ctx.state;
+  const nextState = await resolveStartFlow(ctx);
 
-    const employee =
-      await employeeRepository.findByTelegramUserId(telegramUserId);
+  await dialog.reset(session);
+  await dialog.setState(session, nextState, { force: true });
 
-    if (!employee) {
-      // await dialog.setState(session, STATES.ENTER_MANAGER_PIN);
-      // await ctx.reply(
-      //   'Введите PIN для регистрации менеджера',
-      //   pinKeyboard()
-      // ;)
+  // Добавляем логику ответов в зависимости от того, куда нас направил resolveStartFlow
+  switch (nextState) {
+    case STATES.ONBOARDING_START:
+      // Переводим сразу на ввод пина, чтобы диалог начался
+      await dialog.setState(session, STATES.ENTER_MANAGER_PIN); 
+      return await ctx.reply('Добро пожаловать! Введите секретный PIN для регистрации менеджера:');
 
-      await dialog.setState(session, STATES.ONBOARDING_ENTER_NAME);
-      await ctx.reply('Введите ваше имя и фамилию');
-      return;
-    }
+    case STATES.MANAGER_MENU:
+      return await ctx.reply('Главное меню менеджера:', managerMenu());
 
-    if (employee.role === 'MANAGER') {
-      await dialog.setState(session, STATES.MANAGER_MENU);
-      await ctx.reply('Меню менеджера', managerMenu());
-      return;
-    }
+    case STATES.EMPLOYEE_MENU:
+      return await ctx.reply('Главное меню сотрудника:', employeeMenu());
 
-    await ctx.reply('Добро пожаловать');
-  });
+    default:
+      return await ctx.reply('Система инициализирована. Напишите что-нибудь.');
+  }
 }
+
