@@ -1,0 +1,13 @@
+BEGIN;
+
+CREATE TABLE manager_pins (
+  id SERIAL PRIMARY KEY,
+
+  pin CHAR(4) NOT NULL UNIQUE,
+
+  is_active BOOLEAN NOT NULL DEFAULT true,
+
+  created_at TIMESTAMP NOT NULL DEFAULT now()
+);
+
+COMMIT;

@@ -11,10 +11,10 @@ import { registerTelegramWebhook } from './transport/telegram/registerWebhook.js
 
 // 4. (ВАЖНО) side-effect imports
 // регистрируют handlers, input, callbacks и т.д.
-import './transport/telegram/bot.js';
-//import './transport/telegram/input/createObject.js';
+import { bot } from './transport/telegram/bot.js';
 // дальше будут добавляться новые registrations
- 
+import './transport/telegram/registerHandlers.js';
+
 async function bootstrap() {
   const fastify = Fastify({
     logger: env.NODE_ENV !== 'prod'
@@ -33,7 +33,7 @@ async function bootstrap() {
   console.log(`🚀 Server started on port ${port}`);
 
   // регистрация Telegram webhook (dev)
-  await registerTelegramWebhook();
+  await registerTelegramWebhook(bot);
 }
 
 bootstrap().catch(err => {
