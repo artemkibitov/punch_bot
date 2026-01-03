@@ -1,4 +1,4 @@
-import { getPool } from '../db/pool.js';
+import { getPool } from '../database/pool.js';
 
 export class SessionRepository {
   constructor() {
