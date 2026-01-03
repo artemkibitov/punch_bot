@@ -1,14 +1,42 @@
-import { createServer } from './server/fastify.js';
-import { createBot } from './server/telegraf.js';
-import { registerWebhookRoute } from './server/webhook.js';
-import { registerTelegramWebhook } from './server/webhook-register.js';
+// 1. Загрузка env (fail-fast)
+import './infrastructure/config/env.js';
 
-const app = await createServer();
-const bot = createBot();
+// 2. Поднимаем HTTP-сервер
+import Fastify from 'fastify';
+import { env } from './infrastructure/config/env.js';
+import { registerWebhook } from './server/webhook.js';
 
-registerWebhookRoute(app, bot);
+// 3. DEV-only: регистрация Telegram webhook
+import { registerTelegramWebhook } from './transport/telegram/registerWebhook.js';
 
-await registerTelegramWebhook(bot);
+// 4. (ВАЖНО) side-effect imports
+// регистрируют handlers, input, callbacks и т.д.
+import './transport/telegram/bot.js';
+//import './transport/telegram/input/createObject.js';
+// дальше будут добавляться новые registrations
+ 
+async function bootstrap() {
+  const fastify = Fastify({
+    logger: env.NODE_ENV !== 'prod'
+  });
 
-await app.listen({ port: 3000, host: '0.0.0.0' });
+  // healthcheck
+  fastify.get('/health', async () => ({ status: 'ok' }));
 
+  // webhook endpoint
+  await registerWebhook(fastify);
+
+  // запуск сервера
+  const port = 3000;
+  await fastify.listen({ port, host: '0.0.0.0' });
+
+  console.log(`🚀 Server started on port ${port}`);
+
+  // регистрация Telegram webhook (dev)
+  await registerTelegramWebhook();
+}
+
+bootstrap().catch(err => {
+  console.error('❌ Bootstrap error:', err);
+  process.exit(1);
+});
