@@ -12,8 +12,14 @@ import { registerTelegramWebhook } from './transport/telegram/registerWebhook.js
 // 4. (ВАЖНО) side-effect imports
 // регистрируют handlers, input, callbacks и т.д.
 import { bot } from './transport/telegram/bot.js';
-// дальше будут добавляться новые registrations
-import './transport/telegram/input/register.js';
+// Регистрация FSM состояний
+import './application/fsm/states/onboardingStart.js';
+import './application/fsm/states/enterManagerPin.js';
+import './application/fsm/states/onboardingEnterName.js';
+import './application/fsm/states/managerMenu.js';
+import './application/fsm/states/employeeMenu.js';
+// Регистрация callbacks
+import './transport/telegram/callbacks/pin.js';
 
 async function bootstrap() {
   const fastify = Fastify({

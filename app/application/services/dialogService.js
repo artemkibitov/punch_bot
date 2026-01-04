@@ -38,7 +38,7 @@ export class DialogService {
     // 4. 🔄 Обновляем объект сессии "на лету" (чтобы в ctx.state он уже был новым)
     session.state = nextState;
 
-    return { ...session, data: nextState };
+    return session;
   }
 
   async reset(session) {

@@ -1,0 +1,25 @@
+import { registerState } from '../registry.js';
+import { STATES } from '../../../domain/fsm/states.js';
+import { keyboard } from '../../../transport/telegram/ui/keyboard.js';
+
+// Временное меню для сотрудника, позже будет расширено
+function employeeMenu() {
+  return keyboard([
+    [
+      { text: '📊 Моя статистика', cb: 'employee:stats' }
+    ],
+    [
+      { text: '⏰ Мои часы', cb: 'employee:hours' }
+    ],
+    [
+      { text: '🏗 Мои объекты', cb: 'employee:objects' }
+    ]
+  ]);
+}
+
+registerState(STATES.EMPLOYEE_MENU, {
+  async onEnter(ctx) {
+    await ctx.reply('Главное меню сотрудника:', employeeMenu());
+  }
+});
+

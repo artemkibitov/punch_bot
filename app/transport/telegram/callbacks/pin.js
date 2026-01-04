@@ -2,6 +2,7 @@ import { registerAction } from '../ui/router.js';
 import { STATES } from '../../../domain/fsm/states.js';
 import { ManagerPinRepository } from '../../../infrastructure/repositories/managerPinRepository.js';
 import { pinKeyboard } from '../ui/pinKeyboard.js';
+import { runState } from '../../../application/fsm/router.js';
 
 const pinRepo = new ManagerPinRepository();
 
@@ -29,7 +30,8 @@ registerAction('pin:add', async (ctx, digit) => {
 
     await dialog.clearState(session);
     await dialog.setState(session, STATES.ONBOARDING_ENTER_NAME);
-    await ctx.editMessageText('Введите имя и фамилию');
+    // Вызываем onEnter для нового состояния
+    await runState(ctx, 'enter');
     return;
   }
 

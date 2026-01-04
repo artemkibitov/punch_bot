@@ -1,14 +1,37 @@
+import { registerState } from '../registry.js';
 import { STATES } from '../../../domain/fsm/states.js';
-import { registerInput } from './inputRouter.js';
-import { runValidators, requiredText, maxLength } from './validators.js';
 import { EmployeeRepository } from '../../../infrastructure/repositories/employeeRepository.js';
-import { managerMenu } from '../ui/menus.js';
+import { managerMenu } from '../../../transport/telegram/ui/menus.js';
 
 const employeeRepository = new EmployeeRepository();
 
-registerInput(
-  STATES.ONBOARDING_ENTER_NAME,
-  async (ctx) => {
+function requiredText(text) {
+  if (!text || !text.trim()) {
+    return 'Введите непустой текст';
+  }
+}
+
+function maxLength(max) {
+  return (text) => {
+    if (text.length > max) {
+      return `Максимум ${max} символов`;
+    }
+  };
+}
+
+function runValidators(text, validators = []) {
+  for (const v of validators) {
+    const error = v(text);
+    if (error) return error;
+  }
+}
+
+registerState(STATES.ONBOARDING_ENTER_NAME, {
+  async onEnter(ctx) {
+    await ctx.reply('Введите ваше имя и фамилию');
+  },
+
+  async onInput(ctx) {
     const text = ctx.message.text;
 
     const error = runValidators(text, [
@@ -39,4 +62,5 @@ registerInput(
       managerMenu()
     );
   }
-);
+});
+
