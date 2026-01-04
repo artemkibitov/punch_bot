@@ -18,8 +18,24 @@ import './application/fsm/states/enterManagerPin.js';
 import './application/fsm/states/onboardingEnterName.js';
 import './application/fsm/states/managerMenu.js';
 import './application/fsm/states/employeeMenu.js';
+import './application/fsm/states/adminMenu.js';
+import './application/fsm/states/adminObjectsList.js';
+import './application/fsm/states/adminObjectDetails.js';
+import './application/fsm/states/adminEmployeesList.js';
+import './application/fsm/states/managerObjectsList.js';
+import './application/fsm/states/objectCreateEnterName.js';
+import './application/fsm/states/objectCreateEnterSchedule.js';
+import './application/fsm/states/objectDetails.js';
+import './application/fsm/states/objectEdit.js';
+import './application/fsm/states/objectEditSchedule.js';
+import './application/fsm/states/objectEditStatus.js';
+import './application/fsm/states/objectEmployeesList.js';
+import './application/fsm/states/employeeCreateEnterName.js';
+import './application/fsm/states/employeeRefLinkActivate.js';
 // Регистрация callbacks
 import './transport/telegram/callbacks/pin.js';
+import './transport/telegram/callbacks/manager.js';
+import './transport/telegram/callbacks/admin.js';
 
 async function bootstrap() {
   const fastify = Fastify({

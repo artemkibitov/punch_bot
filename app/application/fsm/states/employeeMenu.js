@@ -1,6 +1,7 @@
 import { registerState } from '../registry.js';
 import { STATES } from '../../../domain/fsm/states.js';
 import { keyboard } from '../../../transport/telegram/ui/keyboard.js';
+import { MessageService } from '../../services/messageService.js';
 
 // Временное меню для сотрудника, позже будет расширено
 function employeeMenu() {
@@ -19,7 +20,8 @@ function employeeMenu() {
 
 registerState(STATES.EMPLOYEE_MENU, {
   async onEnter(ctx) {
-    await ctx.reply('Главное меню сотрудника:', employeeMenu());
+    const { session } = ctx.state;
+    await MessageService.sendOrEdit(ctx, 'Главное меню сотрудника:', employeeMenu(), session);
   }
 });
 

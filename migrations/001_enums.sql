@@ -2,7 +2,8 @@ BEGIN;
 
 CREATE TYPE role_type AS ENUM (
   'MANAGER',
-  'EMPLOYEE'
+  'EMPLOYEE',
+  'ADMIN'
 );
 
 CREATE TYPE work_object_status AS ENUM (

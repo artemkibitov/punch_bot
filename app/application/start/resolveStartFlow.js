@@ -1,4 +1,5 @@
 import { STATES } from '../../domain/fsm/states.js';
+import { ROLES } from '../../domain/constants/roles.js';
 import { EmployeeRepository } from '../../infrastructure/repositories/employeeRepository.js';
 
 const repo = new EmployeeRepository();
@@ -9,9 +10,15 @@ export async function resolveStartFlow(ctx) {
   const employee = await repo.findByTelegramUserId(telegramId);
 
   if (employee) {
-    return employee.role === 'MANAGER'
-      ? STATES.MANAGER_MENU
-      : STATES.EMPLOYEE_MENU;
+    if (employee.role === ROLES.ADMIN) {
+      return STATES.ADMIN_MENU;
+    }
+    if (employee.role === ROLES.MANAGER) {
+      return STATES.MANAGER_MENU;
+    }
+    if (employee.role === ROLES.EMPLOYEE) {
+      return STATES.EMPLOYEE_MENU;
+    }
   }
  
   return STATES.ONBOARDING_START;

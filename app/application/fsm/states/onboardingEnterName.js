@@ -1,7 +1,10 @@
 import { registerState } from '../registry.js';
 import { STATES } from '../../../domain/fsm/states.js';
+import { ROLES } from '../../../domain/constants/roles.js';
 import { EmployeeRepository } from '../../../infrastructure/repositories/employeeRepository.js';
 import { managerMenu } from '../../../transport/telegram/ui/menus.js';
+import { runState } from '../router.js';
+import { MessageService } from '../../services/messageService.js';
 
 const employeeRepository = new EmployeeRepository();
 
@@ -28,11 +31,19 @@ function runValidators(text, validators = []) {
 
 registerState(STATES.ONBOARDING_ENTER_NAME, {
   async onEnter(ctx) {
-    await ctx.reply('Введите ваше имя и фамилию');
+    const { session } = ctx.state;
+    const role = session.data?.role;
+
+    if (role === ROLES.ADMIN) {
+      await MessageService.sendOrEdit(ctx, 'Введите ваше имя и фамилию для регистрации администратора:', {}, session);
+    } else {
+      await MessageService.sendOrEdit(ctx, 'Введите ваше имя и фамилию:', {}, session);
+    }
   },
 
   async onInput(ctx) {
     const text = ctx.message.text;
+    const { dialog, session } = ctx.state;
 
     const error = runValidators(text, [
       requiredText,
@@ -40,27 +51,43 @@ registerState(STATES.ONBOARDING_ENTER_NAME, {
     ]);
 
     if (error) {
-      await ctx.reply(error);
+      await MessageService.sendOrEdit(ctx, error, {}, session);
       return;
     }
 
     const telegramUserId = ctx.from.id;
     const fullName = text.trim();
+    const role = session.data?.role || ROLES.MANAGER;
 
-    await employeeRepository.createManager({
-      telegramUserId,
-      fullName
-    });
+    let createdEmployee;
+    let nextState;
 
-    const { dialog, session } = ctx.state;
+    if (role === ROLES.ADMIN) {
+      // Создаём администратора
+      createdEmployee = await employeeRepository.createAdmin({
+        telegramUserId,
+        fullName
+      });
+      nextState = STATES.ADMIN_MENU;
+    } else {
+      // Создаём менеджера
+      createdEmployee = await employeeRepository.createManager({
+        telegramUserId,
+        fullName
+      });
+      nextState = STATES.MANAGER_MENU;
+    }
 
     await dialog.clearState(session);
-    await dialog.setState(session, STATES.MANAGER_MENU);
+    const updatedSession = await dialog.setState(session, nextState);
+    ctx.state.session = updatedSession;
 
-    await ctx.reply(
-      `Менеджер "${fullName}" создан`,
-      managerMenu()
-    );
+    if (role === ROLES.ADMIN) {
+      await MessageService.sendOrEdit(ctx, `✅ Администратор "${fullName}" создан`, {}, updatedSession);
+      await runState(ctx, 'enter');
+    } else {
+      await MessageService.sendOrEdit(ctx, `✅ Менеджер "${fullName}" создан`, managerMenu(), updatedSession);
+    }
   }
 });
 

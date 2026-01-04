@@ -17,7 +17,7 @@ registerAction('pin:add', async (ctx, digit) => {
   await dialog.mergeData(session, { pin: next });
 
   if (next.length === 4) {
-    const valid = await pinRepo.validate(next);
+    const { valid, role } = await pinRepo.validate(next);
 
     if (!valid) {
       await dialog.mergeData(session, { pin: '' });
@@ -28,8 +28,14 @@ registerAction('pin:add', async (ctx, digit) => {
       return;
     }
 
-    await dialog.clearState(session);
-    await dialog.setState(session, STATES.ONBOARDING_ENTER_NAME);
+    // Сохраняем роль в session.data для использования в onboardingEnterName
+    const sessionWithRole = await dialog.mergeData(session, { role, pin: next });
+    ctx.state.session = sessionWithRole;
+    
+    // Переходим в состояние ввода имени (без clearState, чтобы сохранить роль)
+    const updatedSession = await dialog.setState(sessionWithRole, STATES.ONBOARDING_ENTER_NAME);
+    ctx.state.session = updatedSession;
+    
     // Вызываем onEnter для нового состояния
     await runState(ctx, 'enter');
     return;

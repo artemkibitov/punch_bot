@@ -30,17 +30,35 @@ bot.start(async (ctx) => {
       return;
     }
 
-    const nextState = await resolveStartFlow(ctx);
-    console.log(`📌 /start: resolved to state ${nextState}`);
+    // Проверяем наличие реферального кода в параметрах команды /start
+    // Формат: /start ref-TOKEN (Telegram передает это в ctx.startParam)
+    const startParam = ctx.startParam || '';
+    let nextState;
     
-    const updatedSession = await dialog.setState(session, nextState, { force: true });
-    
+    if (startParam.startsWith('ref-')) {
+      // Извлекаем ref_code из параметра
+      const refCode = startParam.substring(4); // Убираем префикс "ref-"
+      
+      // Сохраняем refCode в сессию
+      const sessionWithRefCode = await dialog.mergeData(session, { refCode });
+      ctx.state.session = sessionWithRefCode; // Обновляем session в ctx.state
+      nextState = STATES.EMPLOYEE_REF_LINK_ACTIVATE;
+      
+      console.log(`📌 /start: ref link activation for code ${refCode}`);
+    } else {
+      // Обычный /start без параметров
+      nextState = await resolveStartFlow(ctx);
+      console.log(`📌 /start: resolved to state ${nextState}`);
+    }
+
+    const updatedSession = await dialog.setState(ctx.state.session, nextState, { force: true });
+
     // Обновляем session в ctx.state после setState
     ctx.state.session = updatedSession;
 
     // Вызываем onEnter для нового состояния
     const handled = await runState(ctx, 'enter');
-    
+
     if (!handled) {
       console.error(`❌ No handler for state ${nextState}`);
       await ctx.reply('Ошибка: обработчик состояния не найден');

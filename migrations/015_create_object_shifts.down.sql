@@ -1,0 +1,6 @@
+BEGIN;
+
+DROP TABLE IF EXISTS object_shifts;
+
+COMMIT;
+
