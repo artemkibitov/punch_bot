@@ -32,7 +32,7 @@ function formatEmployeesList(employees) {
 
 function employeesListKeyboard(employees, objectId) {
   const rows = employees.map((emp, index) => [
-    { text: `${index + 1}. ${emp.full_name}`, cb: `employee:details|${emp.id}` }
+    { text: `${index + 1}. ${emp.full_name}`, cb: `object:employee:worklogs|${objectId}|${emp.id}` }
   ]);
 
   rows.push([

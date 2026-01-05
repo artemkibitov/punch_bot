@@ -8,13 +8,13 @@ export class WorkLogRepository {
   /**
    * Создание work_log (при подтверждении начала)
    */
-  async create({ employeeId, workObjectId, shiftId, date, actualStart, createdBy }) {
+  async create({ employeeId, workObjectId, objectShiftId, date, actualStart, createdBy }) {
     const { rows } = await this.pool.query(
       `
       INSERT INTO work_logs (
         employee_id,
         work_object_id,
-        shift_id,
+        object_shift_id,
         date,
         actual_start,
         created_by
@@ -22,7 +22,7 @@ export class WorkLogRepository {
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
       `,
-      [employeeId, workObjectId, shiftId, date, actualStart, createdBy]
+      [employeeId, workObjectId, objectShiftId, date, actualStart, createdBy]
     );
 
     return rows[0];
@@ -41,6 +41,30 @@ export class WorkLogRepository {
       RETURNING *
       `,
       [actualEnd, workLogId]
+    );
+
+    if (rows.length === 0) {
+      throw new Error('WorkLog not found');
+    }
+
+    return rows[0];
+  }
+
+  /**
+   * Полное обновление work_log (редактирование времени)
+   */
+  async update(workLogId, { actualStart, actualEnd, lunchMinutes, updatedBy }) {
+    const { rows } = await this.pool.query(
+      `
+      UPDATE work_logs
+      SET actual_start = $1,
+          actual_end = $2,
+          lunch_minutes = $3,
+          updated_at = now()
+      WHERE id = $4
+      RETURNING *
+      `,
+      [actualStart, actualEnd, lunchMinutes, workLogId]
     );
 
     if (rows.length === 0) {
@@ -120,9 +144,47 @@ export class WorkLogRepository {
   }
 
   /**
+   * Получение work_logs объекта за период
+   */
+  async findByObjectIdAndDateRange(objectId, dateFrom, dateTo) {
+    const { rows } = await this.pool.query(
+      `
+      SELECT wl.*, e.full_name
+      FROM work_logs wl
+      JOIN employees e ON e.id = wl.employee_id
+      WHERE wl.work_object_id = $1
+        AND wl.date >= $2
+        AND wl.date <= $3
+      ORDER BY wl.date DESC, e.full_name
+      `,
+      [objectId, dateFrom, dateTo]
+    );
+
+    return rows;
+  }
+
+  /**
+   * Получение work_logs по object_shift_id
+   */
+  async findByObjectShiftId(objectShiftId) {
+    const { rows } = await this.pool.query(
+      `
+      SELECT wl.*, e.full_name
+      FROM work_logs wl
+      JOIN employees e ON e.id = wl.employee_id
+      WHERE wl.object_shift_id = $1
+      ORDER BY e.full_name
+      `,
+      [objectShiftId]
+    );
+
+    return rows;
+  }
+
+  /**
    * Создание индивидуальной корректировки
    */
-  async createOverride({ employeeId, workObjectId, date, actualStart, actualEnd, createdBy }) {
+  async createOverride({ employeeId, workObjectId, date, actualStart, actualEnd, lunchMinutes = 0, createdBy }) {
     const { rows } = await this.pool.query(
       `
       INSERT INTO work_logs (
@@ -131,13 +193,14 @@ export class WorkLogRepository {
         date,
         actual_start,
         actual_end,
+        lunch_minutes,
         is_override,
         created_by
       )
-      VALUES ($1, $2, $3, $4, $5, true, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, true, $7)
       RETURNING *
       `,
-      [employeeId, workObjectId, date, actualStart, actualEnd, createdBy]
+      [employeeId, workObjectId, date, actualStart, actualEnd, lunchMinutes, createdBy]
     );
 
     return rows[0];

@@ -6,7 +6,8 @@
     "start": "node app/main.js",
     "dev": "node app/main.js",
     "migrate": "node scripts/migrate.js",
-    "rollback": "node scripts/rollback.js"
+    "rollback": "node scripts/rollback.js",
+    "mock": "node scripts/createMockData.js"
   },
   "dependencies": {
     "pg": "^8.13.0",

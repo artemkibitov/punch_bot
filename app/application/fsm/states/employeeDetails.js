@@ -5,6 +5,7 @@ import { AssignmentRepository } from '../../../infrastructure/repositories/assig
 import { WorkLogRepository } from '../../../infrastructure/repositories/workLogRepository.js';
 import { keyboard } from '../../../transport/telegram/ui/keyboard.js';
 import { MessageService } from '../../services/messageService.js';
+import { calculateWorkHours } from '../../services/shiftTimeService.js';
 
 const employeeRepo = new EmployeeRepository();
 const assignmentRepo = new AssignmentRepository();
@@ -118,12 +119,9 @@ registerState(STATES.EMPLOYEE_DETAILS, {
       const workLogs = await workLogRepo.findByEmployeeId(employeeId);
       const totalHours = workLogs.reduce((sum, log) => {
         if (log.actual_start && log.actual_end) {
-          const start = new Date(log.actual_start);
-          const end = new Date(log.actual_end);
-          const diffMs = end - start;
-          const diffHours = diffMs / (1000 * 60 * 60);
-          const lunchHours = (log.lunch_minutes || 0) / 60;
-          return sum + (diffHours - lunchHours);
+          // Используем calculateWorkHours для правильного подсчета с учетом перехода на следующий день
+          const hours = calculateWorkHours(log.actual_start, log.actual_end, log.lunch_minutes || 0);
+          return sum + hours;
         }
         return sum;
       }, 0);

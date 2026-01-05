@@ -1,4 +1,4 @@
-const handlers = new Map();
+export const handlers = new Map();
 
 export function registerAction(action, handler) {
   if (handlers.has(action)) {

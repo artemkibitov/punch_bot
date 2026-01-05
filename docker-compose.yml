@@ -17,7 +17,6 @@ services:
     environment:
       WEBHOOK_SECRET: ${WEBHOOK_SECRET}
       DATABASE_URL: ${DATABASE_URL}
-      WEBHOOK_PATH: ${WEBHOOK_PATH}
       BOT_TOKEN: ${BOT_TOKEN}
       NODE_ENV: ${NODE_ENV}
       DB_USER: ${DB_USER}

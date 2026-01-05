@@ -83,7 +83,7 @@ registerState(STATES.MANAGER_OBJECT_EMPLOYEE_ONBOARD, {
 
       // Получаем уже назначенных на объект сотрудников
       const assignedEmployees = await assignmentRepo.findActiveByObjectId(objectId);
-      const assignedEmployeeIds = assignedEmployees.map(emp => emp.id);
+      const assignedEmployeeIds = assignedEmployees.map(emp => emp.employee_id);
 
       // Фильтруем только тех сотрудников, которые еще не назначены на объект
       const availableEmployees = employees.filter(emp => !assignedEmployeeIds.includes(emp.id));

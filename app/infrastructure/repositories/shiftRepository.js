@@ -30,6 +30,23 @@ export class ShiftRepository {
   }
 
   /**
+   * Получение смены по ID
+   */
+  async findById(shiftId) {
+    const { rows } = await this.pool.query(
+      `
+      SELECT os.*, wo.name as object_name, wo.manager_id
+      FROM object_shifts os
+      JOIN work_objects wo ON wo.id = os.work_object_id
+      WHERE os.id = $1
+      `,
+      [shiftId]
+    );
+
+    return rows[0] || null;
+  }
+
+  /**
    * Получение смены объекта на дату
    */
   async findByObjectAndDate(objectId, date) {

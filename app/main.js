@@ -36,12 +36,22 @@ import './application/fsm/states/objectEdit.js';
 import './application/fsm/states/objectEditSchedule.js';
 import './application/fsm/states/objectEditStatus.js';
 import './application/fsm/states/objectEmployeesList.js';
+import './application/fsm/states/objectShiftsList.js';
+import './application/fsm/states/objectShiftDetails.js';
+import './application/fsm/states/objectShiftReport.js';
+import './application/fsm/states/workLogDetails.js';
+import './application/fsm/states/workLogEdit.js';
+import './application/fsm/states/workLogCreate.js';
+import './application/fsm/states/objectEmployeeWorkLogs.js';
+import './application/fsm/states/shiftStartMarkAbsent.js';
+import './application/fsm/states/shiftAddEmployee.js';
 import './application/fsm/states/employeeCreateEnterName.js';
 import './application/fsm/states/employeeDetails.js';
 import './application/fsm/states/employeeRefLinkActivate.js';
 // Регистрация callbacks
 import './transport/telegram/callbacks/pin.js';
 import './transport/telegram/callbacks/manager.js';
+import './transport/telegram/callbacks/worklog.js';
 import './transport/telegram/callbacks/admin.js';
 
 async function bootstrap() {

@@ -307,6 +307,502 @@ registerAction('object:edit:status', async (ctx, objectId) => {
   await runState(ctx, 'enter');
 });
 
+// object:shifts - список смен объекта
+registerAction('object:shifts', async (ctx, objectId) => {
+  const { dialog, session } = ctx.state;
+
+  const updatedSession = await dialog.mergeData(session, { 
+    currentObjectId: parseInt(objectId, 10),
+    shiftsPage: 0
+  });
+  ctx.state.session = updatedSession;
+
+  const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_SHIFTS_LIST);
+  ctx.state.session = finalSession;
+
+  await runState(ctx, 'enter');
+});
+
+// object:shifts:page - пагинация списка смен
+registerAction('object:shifts:page', async (ctx, payload) => {
+  const { dialog, session } = ctx.state;
+  const { runState } = await import('../../../application/fsm/router.js');
+  const { STATES } = await import('../../../domain/fsm/states.js');
+
+  const [objectId, page] = payload.split('|');
+
+  const updatedSession = await dialog.mergeData(session, { 
+    currentObjectId: parseInt(objectId, 10),
+    shiftsPage: parseInt(page, 10)
+  });
+  ctx.state.session = updatedSession;
+
+  const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_SHIFTS_LIST);
+  ctx.state.session = finalSession;
+
+  await runState(ctx, 'enter');
+});
+
+// object:shift:details - детали смены
+registerAction('object:shift:details', async (ctx, payload) => {
+  const { dialog, session } = ctx.state;
+  const [objectId, shiftId] = payload.split('|');
+
+  const updatedSession = await dialog.mergeData(session, { 
+    currentObjectId: parseInt(objectId, 10),
+    currentShiftId: parseInt(shiftId, 10)
+  });
+  ctx.state.session = updatedSession;
+
+  const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_SHIFT_DETAILS);
+  ctx.state.session = finalSession;
+
+  await runState(ctx, 'enter');
+});
+
+// object:shift:confirm:start - подтверждение начала смены (без отсутствующих)
+registerAction('object:shift:confirm:start', async (ctx, payload) => {
+  const { ShiftService } = await import('../../../application/services/shiftService.js');
+  const { EmployeeRepository } = await import('../../../infrastructure/repositories/employeeRepository.js');
+  const { AuditLogRepository } = await import('../../../infrastructure/repositories/auditLogRepository.js');
+  const { runState } = await import('../../../application/fsm/router.js');
+  const { STATES } = await import('../../../domain/fsm/states.js');
+
+  const shiftService = new ShiftService();
+  const employeeRepo = new EmployeeRepository();
+  const auditRepo = new AuditLogRepository();
+  const { dialog, session } = ctx.state;
+
+  const [objectId, shiftId] = payload.split('|');
+
+  // Получаем manager
+  const manager = await employeeRepo.findByTelegramUserId(ctx.from.id);
+  if (!manager) {
+    await ctx.answerCbQuery('Ошибка: менеджер не найден');
+    return;
+  }
+
+  try {
+    // Подтверждаем начало смены (без отсутствующих)
+    const { shift, workLogs } = await shiftService.confirmShiftStart(
+      parseInt(shiftId, 10),
+      manager.id,
+      null,
+      [] // нет отсутствующих
+    );
+
+    // Логируем в audit
+    await auditRepo.log({
+      entityType: 'object_shifts',
+      entityId: parseInt(shiftId, 10),
+      action: 'update',
+      changedBy: manager.id,
+      metadata: { field: 'status', oldValue: 'planned', newValue: 'started', workLogsCount: workLogs.length }
+    });
+
+    // Возвращаемся к деталям смены
+    const updatedSession = await dialog.mergeData(session, { 
+      currentObjectId: parseInt(objectId, 10),
+      currentShiftId: parseInt(shiftId, 10)
+    });
+    const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_SHIFT_DETAILS);
+    ctx.state.session = finalSession;
+
+    await ctx.answerCbQuery(`✅ Смена начата. Создано ${workLogs.length} записей о работе.`);
+    await runState(ctx, 'enter');
+  } catch (error) {
+    console.error('Error confirming shift start:', error);
+    await ctx.answerCbQuery('Ошибка при подтверждении начала смены');
+  }
+});
+
+// shift:start:mark:absent - отметить отсутствующих при начале смены
+registerAction('shift:start:mark:absent', async (ctx, payload) => {
+  const { dialog, session } = ctx.state;
+  const { runState } = await import('../../../application/fsm/router.js');
+  const { STATES } = await import('../../../domain/fsm/states.js');
+
+  const [objectId, shiftId] = payload.split('|');
+
+  const updatedSession = await dialog.mergeData(session, { 
+    currentObjectId: parseInt(objectId, 10),
+    currentShiftId: parseInt(shiftId, 10)
+  });
+  ctx.state.session = updatedSession;
+
+  const finalSession = await dialog.setState(updatedSession, STATES.SHIFT_START_MARK_ABSENT);
+  ctx.state.session = finalSession;
+
+  await runState(ctx, 'enter');
+});
+
+// shift:start:continue - продолжить без отсутствующих
+registerAction('shift:start:continue', async (ctx, payload) => {
+  const { ShiftService } = await import('../../../application/services/shiftService.js');
+  const { EmployeeRepository } = await import('../../../infrastructure/repositories/employeeRepository.js');
+  const { AuditLogRepository } = await import('../../../infrastructure/repositories/auditLogRepository.js');
+  const { runState } = await import('../../../application/fsm/router.js');
+  const { STATES } = await import('../../../domain/fsm/states.js');
+
+  const shiftService = new ShiftService();
+  const employeeRepo = new EmployeeRepository();
+  const auditRepo = new AuditLogRepository();
+  const { dialog, session } = ctx.state;
+
+  const [objectId, shiftId] = payload.split('|');
+
+  const manager = await employeeRepo.findByTelegramUserId(ctx.from.id);
+  if (!manager) {
+    await ctx.answerCbQuery('Ошибка: менеджер не найден');
+    return;
+  }
+
+  try {
+    const { shift, workLogs } = await shiftService.confirmShiftStart(
+      parseInt(shiftId, 10),
+      manager.id
+    );
+
+    await auditRepo.log({
+      entityType: 'object_shifts',
+      entityId: parseInt(shiftId, 10),
+      action: 'update',
+      changedBy: manager.id,
+      metadata: { field: 'status', oldValue: 'planned', newValue: 'started', workLogsCount: workLogs.length }
+    });
+
+    const updatedSession = await dialog.mergeData(session, { 
+      currentObjectId: parseInt(objectId, 10),
+      currentShiftId: parseInt(shiftId, 10)
+    });
+    const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_SHIFT_DETAILS);
+    ctx.state.session = finalSession;
+
+    const message = workLogs.length > 0 
+      ? `✅ Смена начата. Создано ${workLogs.length} записей о работе.`
+      : `✅ Смена начата. Нет сотрудников в смене.`;
+    
+    await ctx.answerCbQuery(message);
+    await runState(ctx, 'enter');
+  } catch (error) {
+    console.error('Error confirming shift start:', error);
+    await ctx.answerCbQuery('Ошибка при подтверждении начала смены');
+  }
+});
+
+// shift:start:mark:absent:employee - отметить конкретного сотрудника как отсутствующего
+registerAction('shift:start:mark:absent:employee', async (ctx, payload) => {
+  const { dialog, session } = ctx.state;
+  const { runState } = await import('../../../application/fsm/router.js');
+  const { STATES } = await import('../../../domain/fsm/states.js');
+
+  const [objectId, shiftId, employeeId] = payload.split('|');
+
+  // Добавляем сотрудника в список отсутствующих
+  const currentAbsent = session.data?.absentEmployeeIds || [];
+  if (!currentAbsent.includes(parseInt(employeeId, 10))) {
+    currentAbsent.push(parseInt(employeeId, 10));
+  }
+
+  const updatedSession = await dialog.mergeData(session, { 
+    currentObjectId: parseInt(objectId, 10),
+    currentShiftId: parseInt(shiftId, 10),
+    absentEmployeeIds: currentAbsent
+  });
+  ctx.state.session = updatedSession;
+
+  // Возвращаемся к состоянию отметки отсутствующих
+  const finalSession = await dialog.setState(updatedSession, STATES.SHIFT_START_MARK_ABSENT);
+  ctx.state.session = finalSession;
+
+  await ctx.answerCbQuery(`✅ Сотрудник отмечен как отсутствующий`);
+  await runState(ctx, 'enter');
+});
+
+// shift:add:employee - добавить сотрудника в смену
+registerAction('shift:add:employee', async (ctx, payload) => {
+  const { dialog, session } = ctx.state;
+  const { runState } = await import('../../../application/fsm/router.js');
+  const { STATES } = await import('../../../domain/fsm/states.js');
+
+  const [objectId, shiftId] = payload.split('|');
+
+  const updatedSession = await dialog.mergeData(session, { 
+    currentObjectId: parseInt(objectId, 10),
+    currentShiftId: parseInt(shiftId, 10)
+  });
+  ctx.state.session = updatedSession;
+
+  const finalSession = await dialog.setState(updatedSession, STATES.SHIFT_ADD_EMPLOYEE);
+  ctx.state.session = finalSession;
+
+  await runState(ctx, 'enter');
+});
+
+// shift:add:employee:confirm - подтверждение добавления сотрудника в смену
+registerAction('shift:add:employee:confirm', async (ctx, payload) => {
+  const { ShiftService } = await import('../../../application/services/shiftService.js');
+  const { EmployeeRepository } = await import('../../../infrastructure/repositories/employeeRepository.js');
+  const { AuditLogRepository } = await import('../../../infrastructure/repositories/auditLogRepository.js');
+  const { runState } = await import('../../../application/fsm/router.js');
+  const { STATES } = await import('../../../domain/fsm/states.js');
+
+  const shiftService = new ShiftService();
+  const employeeRepo = new EmployeeRepository();
+  const auditRepo = new AuditLogRepository();
+  const { dialog, session } = ctx.state;
+
+  const [objectId, shiftId, employeeId] = payload.split('|');
+
+  const manager = await employeeRepo.findByTelegramUserId(ctx.from.id);
+  if (!manager) {
+    await ctx.answerCbQuery('Ошибка: менеджер не найден');
+    return;
+  }
+
+  try {
+    const workLog = await shiftService.addEmployeeToShift(
+      parseInt(shiftId, 10),
+      parseInt(employeeId, 10),
+      manager.id
+    );
+
+    const employee = await employeeRepo.findById(parseInt(employeeId, 10));
+
+    await auditRepo.log({
+      entityType: 'work_logs',
+      entityId: workLog.id,
+      action: 'create',
+      changedBy: manager.id,
+      metadata: { 
+        type: 'added_to_shift',
+        employeeId: parseInt(employeeId, 10),
+        shiftId: parseInt(shiftId, 10),
+        employeeName: employee?.full_name
+      }
+    });
+
+    const updatedSession = await dialog.mergeData(session, { 
+      currentObjectId: parseInt(objectId, 10),
+      currentShiftId: parseInt(shiftId, 10)
+    });
+    const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_SHIFT_DETAILS);
+    ctx.state.session = finalSession;
+
+    await ctx.answerCbQuery(`✅ Сотрудник ${employee?.full_name || 'добавлен'} добавлен в смену`);
+    await runState(ctx, 'enter');
+  } catch (error) {
+    console.error('Error adding employee to shift:', error);
+    if (error.message === 'Employee already has work log for this shift') {
+      await ctx.answerCbQuery('⚠️ Сотрудник уже в смене');
+    } else {
+      await ctx.answerCbQuery('Ошибка при добавлении сотрудника');
+    }
+  }
+});
+
+// shift:remove:employee - удалить сотрудника из смены (ранний уход)
+registerAction('shift:remove:employee', async (ctx, payload) => {
+  const { ShiftService } = await import('../../../application/services/shiftService.js');
+  const { EmployeeRepository } = await import('../../../infrastructure/repositories/employeeRepository.js');
+  const { AuditLogRepository } = await import('../../../infrastructure/repositories/auditLogRepository.js');
+  const { WorkLogRepository } = await import('../../../infrastructure/repositories/workLogRepository.js');
+  const { runState } = await import('../../../application/fsm/router.js');
+  const { STATES } = await import('../../../domain/fsm/states.js');
+
+  const shiftService = new ShiftService();
+  const employeeRepo = new EmployeeRepository();
+  const auditRepo = new AuditLogRepository();
+  const workLogRepo = new WorkLogRepository();
+  const { dialog, session } = ctx.state;
+
+  const [objectId, shiftId, workLogId] = payload.split('|');
+
+  const manager = await employeeRepo.findByTelegramUserId(ctx.from.id);
+  if (!manager) {
+    await ctx.answerCbQuery('Ошибка: менеджер не найден');
+    return;
+  }
+
+  try {
+    const workLog = await shiftService.removeEmployeeFromShift(
+      parseInt(workLogId, 10),
+      manager.id
+    );
+
+    await auditRepo.log({
+      entityType: 'work_logs',
+      entityId: parseInt(workLogId, 10),
+      action: 'update',
+      changedBy: manager.id,
+      metadata: { 
+        field: 'actual_end',
+        type: 'early_leave',
+        shiftId: parseInt(shiftId, 10)
+      }
+    });
+
+    const updatedSession = await dialog.mergeData(session, { 
+      currentObjectId: parseInt(objectId, 10),
+      currentShiftId: parseInt(shiftId, 10)
+    });
+    const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_SHIFT_DETAILS);
+    ctx.state.session = finalSession;
+
+    await ctx.answerCbQuery(`✅ Работа сотрудника завершена`);
+    await runState(ctx, 'enter');
+  } catch (error) {
+    console.error('Error removing employee from shift:', error);
+    await ctx.answerCbQuery('Ошибка при завершении работы сотрудника');
+  }
+});
+
+// object:shift:confirm:end - подтверждение окончания смены
+registerAction('object:shift:confirm:end', async (ctx, payload) => {
+  const { ShiftService } = await import('../../../application/services/shiftService.js');
+  const { EmployeeRepository } = await import('../../../infrastructure/repositories/employeeRepository.js');
+  const { AuditLogRepository } = await import('../../../infrastructure/repositories/auditLogRepository.js');
+  const { runState } = await import('../../../application/fsm/router.js');
+  const { STATES } = await import('../../../domain/fsm/states.js');
+
+  const shiftService = new ShiftService();
+  const employeeRepo = new EmployeeRepository();
+  const auditRepo = new AuditLogRepository();
+  const { dialog, session } = ctx.state;
+
+  const [objectId, shiftId] = payload.split('|');
+
+  // Получаем manager
+  const manager = await employeeRepo.findByTelegramUserId(ctx.from.id);
+  if (!manager) {
+    await ctx.answerCbQuery('Ошибка: менеджер не найден');
+    return;
+  }
+
+  try {
+    // Подтверждаем окончание смены
+    const { shift, workLogs } = await shiftService.confirmShiftEnd(
+      parseInt(shiftId, 10),
+      manager.id
+    );
+
+    // Логируем в audit
+    await auditRepo.log({
+      entityType: 'object_shifts',
+      entityId: parseInt(shiftId, 10),
+      action: 'update',
+      changedBy: manager.id,
+      metadata: { field: 'status', oldValue: 'started', newValue: 'closed', workLogsCount: workLogs.length }
+    });
+
+    // Возвращаемся к деталям смены
+    const updatedSession = await dialog.mergeData(session, { 
+      currentObjectId: parseInt(objectId, 10),
+      currentShiftId: parseInt(shiftId, 10)
+    });
+    const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_SHIFT_DETAILS);
+    ctx.state.session = finalSession;
+
+    await ctx.answerCbQuery(`✅ Смена завершена. Обновлено ${workLogs.length} записей о работе.`);
+    await runState(ctx, 'enter');
+  } catch (error) {
+    console.error('Error confirming shift end:', error);
+    await ctx.answerCbQuery('Ошибка при подтверждении окончания смены');
+  }
+});
+
+// object:reports - отчеты по объекту
+registerAction('object:reports', async (ctx, objectId) => {
+  const { dialog, session } = ctx.state;
+  const { runState } = await import('../../../application/fsm/router.js');
+  const { STATES } = await import('../../../domain/fsm/states.js');
+
+  const updatedSession = await dialog.mergeData(session, { currentObjectId: parseInt(objectId, 10) });
+  ctx.state.session = updatedSession;
+
+  const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_SHIFT_REPORT);
+  ctx.state.session = finalSession;
+
+  await runState(ctx, 'enter');
+});
+
+// object:shift:create - создание смены
+registerAction('object:shift:create', async (ctx, objectId) => {
+  const { ShiftService } = await import('../../../application/services/shiftService.js');
+  const { EmployeeRepository } = await import('../../../infrastructure/repositories/employeeRepository.js');
+  const { AuditLogRepository } = await import('../../../infrastructure/repositories/auditLogRepository.js');
+  const { runState } = await import('../../../application/fsm/router.js');
+  const { STATES } = await import('../../../domain/fsm/states.js');
+
+  const shiftService = new ShiftService();
+  const employeeRepo = new EmployeeRepository();
+  const auditRepo = new AuditLogRepository();
+  const { dialog, session } = ctx.state;
+
+  // Получаем manager
+  const manager = await employeeRepo.findByTelegramUserId(ctx.from.id);
+  if (!manager) {
+    await ctx.answerCbQuery('Ошибка: менеджер не найден');
+    return;
+  }
+
+  try {
+    // Создаем смену на сегодня
+    const today = new Date().toISOString().split('T')[0];
+    const shift = await shiftService.createShiftForDate(parseInt(objectId, 10), today);
+
+    if (!shift) {
+      await ctx.answerCbQuery('⚠️ Смена на сегодня уже существует');
+      // Возвращаемся к списку смен
+      const updatedSession = await dialog.mergeData(session, { currentObjectId: parseInt(objectId, 10) });
+      const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_SHIFTS_LIST);
+      ctx.state.session = finalSession;
+      await runState(ctx, 'enter');
+      return;
+    }
+
+    // Логируем в audit
+    await auditRepo.log({
+      entityType: 'object_shifts',
+      entityId: shift.id,
+      action: 'create',
+      changedBy: manager.id,
+      metadata: { date: today, objectId: parseInt(objectId, 10) }
+    });
+
+    // Возвращаемся к списку смен
+    const updatedSession = await dialog.mergeData(session, { currentObjectId: parseInt(objectId, 10) });
+    const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_SHIFTS_LIST);
+    ctx.state.session = finalSession;
+
+    await ctx.answerCbQuery('✅ Смена создана');
+    await runState(ctx, 'enter');
+  } catch (error) {
+    console.error('Error creating shift:', error);
+    await ctx.answerCbQuery(`Ошибка при создании смены: ${error.message}`);
+  }
+});
+
+// object:employee:worklogs - записи о работе сотрудника на объекте
+registerAction('object:employee:worklogs', async (ctx, payload) => {
+  const { dialog, session } = ctx.state;
+  const { runState } = await import('../../../application/fsm/router.js');
+  const { STATES } = await import('../../../domain/fsm/states.js');
+
+  const [objectId, employeeId] = payload.split('|');
+
+  const updatedSession = await dialog.mergeData(session, { 
+    currentObjectId: parseInt(objectId, 10),
+    currentEmployeeId: parseInt(employeeId, 10)
+  });
+  ctx.state.session = updatedSession;
+
+  const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_EMPLOYEE_WORK_LOGS);
+  ctx.state.session = finalSession;
+
+  await runState(ctx, 'enter');
+});
+
 // object:edit:status:confirm - подтверждение изменения статуса
 registerAction('object:edit:status:confirm', async (ctx, payload) => {
   const { dialog, session } = ctx.state;

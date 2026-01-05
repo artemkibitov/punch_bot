@@ -17,6 +17,12 @@ export function objectDetailsMenu(objectId) {
       { text: '👥 Сотрудники объекта', cb: `object:employees|${objectId}` }
     ],
     [
+      { text: '📅 Смены объекта', cb: `object:shifts|${objectId}` }
+    ],
+    [
+      { text: '📊 Отчеты', cb: `object:reports|${objectId}` }
+    ],
+    [
       { text: '⚙️ Редактировать', cb: `object:edit|${objectId}` }
     ],
     [
