@@ -83,6 +83,24 @@ export class WorkLogRepository {
   }
 
   /**
+   * Получение активных work_logs сотрудника (без actual_end)
+   */
+  async findActiveByEmployeeId(employeeId) {
+    const { rows } = await this.pool.query(
+      `
+      SELECT wl.*, wo.name as object_name
+      FROM work_logs wl
+      JOIN work_objects wo ON wo.id = wl.work_object_id
+      WHERE wl.employee_id = $1
+        AND wl.actual_end IS NULL
+      ORDER BY wl.actual_start DESC
+      `,
+      [employeeId]
+    );
+    return rows;
+  }
+
+  /**
    * Получение work_logs объекта на дату
    */
   async findByObjectAndDate(objectId, date) {
@@ -102,7 +120,7 @@ export class WorkLogRepository {
   }
 
   /**
-   * Индивидуальная корректировка
+   * Создание индивидуальной корректировки
    */
   async createOverride({ employeeId, workObjectId, date, actualStart, actualEnd, createdBy }) {
     const { rows } = await this.pool.query(
@@ -181,4 +199,3 @@ export class WorkLogRepository {
     return rows[0];
   }
 }
-

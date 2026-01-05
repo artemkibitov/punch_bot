@@ -12,7 +12,9 @@ export async function routeCallback(ctx) {
   const data = ctx.callbackQuery?.data;
   if (!data) return;
 
-  const [action, payload] = data.split('|');
+  const parts = data.split('|');
+  const action = parts[0];
+  const payload = parts.length > 1 ? parts.slice(1).join('|') : undefined;
 
   const handler = handlers.get(action);
 

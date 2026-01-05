@@ -28,6 +28,26 @@ registerAction('manager:objects', async (ctx) => {
   await runState(ctx, 'enter');
 });
 
+// manager:employees - список сотрудников менеджера
+registerAction('manager:employees', async (ctx) => {
+  const { dialog, session } = ctx.state;
+
+  const updatedSession = await dialog.setState(session, STATES.MANAGER_EMPLOYEES_LIST);
+  ctx.state.session = updatedSession;
+
+  await runState(ctx, 'enter');
+});
+
+// manager:employee:create - создание сотрудника менеджером
+registerAction('manager:employee:create', async (ctx) => {
+  const { dialog, session } = ctx.state;
+
+  const updatedSession = await dialog.setState(session, STATES.MANAGER_EMPLOYEE_CREATE_ENTER_NAME);
+  ctx.state.session = updatedSession;
+
+  await runState(ctx, 'enter');
+});
+
 // object:create - создание объекта
 registerAction('object:create', async (ctx) => {
   const { dialog, session } = ctx.state;
@@ -76,25 +96,176 @@ registerAction('object:employees', async (ctx, objectId) => {
   await runState(ctx, 'enter');
 });
 
-// employee:create - создание сотрудника
-registerAction('employee:create', async (ctx, objectId) => {
+// manager:object:employee:onboard - выбор сотрудника для назначения на объект
+registerAction('manager:object:employee:onboard', async (ctx, objectId) => {
   const { dialog, session } = ctx.state;
 
   // Сохраняем objectId в data
   const updatedSession = await dialog.mergeData(session, { currentObjectId: parseInt(objectId, 10) });
   ctx.state.session = updatedSession;
 
-  // Переходим в состояние создания сотрудника
-  const finalSession = await dialog.setState(updatedSession, STATES.EMPLOYEE_CREATE_ENTER_NAME);
+  // Переходим в состояние выбора сотрудника для назначения
+  const finalSession = await dialog.setState(updatedSession, STATES.MANAGER_OBJECT_EMPLOYEE_ONBOARD);
   ctx.state.session = finalSession;
   
   await runState(ctx, 'enter');
 });
 
+// manager:object:employee:onboard:confirm - подтверждение назначения сотрудника на объект
+registerAction('manager:object:employee:onboard:confirm', async (ctx, payload) => {
+  const { AssignmentRepository } = await import('../../../infrastructure/repositories/assignmentRepository.js');
+  const { EmployeeRepository } = await import('../../../infrastructure/repositories/employeeRepository.js');
+  const { AuditLogRepository } = await import('../../../infrastructure/repositories/auditLogRepository.js');
+  const { ObjectRepository } = await import('../../../infrastructure/repositories/objectRepository.js');
+
+  const assignmentRepo = new AssignmentRepository();
+  const employeeRepo = new EmployeeRepository();
+  const auditRepo = new AuditLogRepository();
+  const objectRepo = new ObjectRepository();
+
+  const [objectId, employeeId] = payload.split('|');
+
+  // Получаем manager
+  const manager = await employeeRepo.findByTelegramUserId(ctx.from.id);
+  if (!manager) {
+    await ctx.answerCbQuery('Ошибка: менеджер не найден');
+    return;
+  }
+
+  try {
+    // Проверяем объект
+    const object = await objectRepo.findById(parseInt(objectId, 10), { 
+      managerId: manager.id, 
+      isAdmin: manager.role === 'ADMIN' 
+    });
+    if (!object) {
+      await ctx.answerCbQuery('Ошибка: объект не найден или нет доступа');
+      return;
+    }
+
+    // Проверяем сотрудника (должен быть создан этим менеджером)
+    const employee = await employeeRepo.findById(parseInt(employeeId, 10));
+    if (!employee) {
+      await ctx.answerCbQuery('Сотрудник не найден');
+      return;
+    }
+
+    if (employee.created_by !== manager.id && manager.role !== 'ADMIN') {
+      await ctx.answerCbQuery('Ошибка: нет доступа к этому сотруднику');
+      return;
+    }
+
+    // Назначаем сотрудника на объект
+    const assignment = await assignmentRepo.assign({
+      employeeId: parseInt(employeeId, 10),
+      workObjectId: parseInt(objectId, 10),
+      assignedBy: manager.id
+    });
+
+    // Логируем в audit
+    await auditRepo.log({
+      entityType: 'assignments',
+      entityId: assignment.id,
+      action: 'create',
+      changedBy: manager.id,
+      metadata: { employeeId: parseInt(employeeId, 10), workObjectId: parseInt(objectId, 10), employeeName: employee.full_name }
+    });
+
+    // Возвращаемся к списку сотрудников объекта
+    const { dialog, session } = ctx.state;
+    const updatedSession = await dialog.mergeData(session, { currentObjectId: parseInt(objectId, 10) });
+    const finalSession = await dialog.setState(updatedSession, STATES.OBJECT_EMPLOYEES_LIST);
+    ctx.state.session = finalSession;
+
+    await ctx.answerCbQuery(`✅ Сотрудник ${employee.full_name} назначен на объект`);
+    await runState(ctx, 'enter');
+  } catch (error) {
+    console.error('Error assigning employee to object:', error);
+    if (error.message === 'Employee already assigned to this object') {
+      await ctx.answerCbQuery('⚠️ Сотрудник уже назначен на этот объект');
+    } else {
+      await ctx.answerCbQuery('Ошибка при назначении сотрудника');
+    }
+  }
+});
+
 // employee:details - детали сотрудника
 registerAction('employee:details', async (ctx, employeeId) => {
-  // TODO: создать состояние EMPLOYEE_DETAILS
-  await ctx.answerCbQuery('Детали сотрудника (в разработке)');
+  const { dialog, session } = ctx.state;
+
+  // Определяем состояние для возврата (из текущего состояния)
+  const currentState = session.state;
+  let backCallback = 'manager:employees';
+  if (currentState === STATES.OBJECT_EMPLOYEES_LIST) {
+    backCallback = `object:employees|${session.data?.currentObjectId}`;
+  }
+
+  // Сохраняем employeeId и callback для возврата
+  const updatedSession = await dialog.mergeData(session, { 
+    currentEmployeeId: parseInt(employeeId, 10),
+    backState: currentState,
+    backCallback
+  });
+  ctx.state.session = updatedSession;
+
+  // Переходим в состояние деталей сотрудника
+  const finalSession = await dialog.setState(updatedSession, STATES.EMPLOYEE_DETAILS);
+  ctx.state.session = finalSession;
+
+  await runState(ctx, 'enter');
+});
+
+// employee:unassign - удаление сотрудника с объекта
+registerAction('employee:unassign', async (ctx, payload) => {
+  const { AssignmentRepository } = await import('../../../infrastructure/repositories/assignmentRepository.js');
+  const { EmployeeRepository } = await import('../../../infrastructure/repositories/employeeRepository.js');
+  const { AuditLogRepository } = await import('../../../infrastructure/repositories/auditLogRepository.js');
+  const { runState } = await import('../../../application/fsm/router.js');
+
+  const assignmentRepo = new AssignmentRepository();
+  const employeeRepo = new EmployeeRepository();
+  const auditRepo = new AuditLogRepository();
+  const { dialog, session } = ctx.state;
+
+  const [employeeId, objectId] = payload.split('|');
+
+  // Получаем текущего пользователя
+  const currentUser = await employeeRepo.findByTelegramUserId(ctx.from.id);
+  if (!currentUser) {
+    await ctx.answerCbQuery('Ошибка: пользователь не найден');
+    return;
+  }
+
+  try {
+    // Удаляем назначение
+    await assignmentRepo.unassign({
+      employeeId: parseInt(employeeId, 10),
+      workObjectId: parseInt(objectId, 10),
+      unassignedBy: currentUser.id
+    });
+
+    // Логируем в audit
+    await auditRepo.log({
+      entityType: 'assignments',
+      entityId: parseInt(employeeId, 10),
+      action: 'unassign',
+      changedBy: currentUser.id,
+      metadata: { employeeId: parseInt(employeeId, 10), objectId: parseInt(objectId, 10) }
+    });
+
+    // Обновляем детали сотрудника
+    const updatedSession = await dialog.mergeData(session, { currentEmployeeId: parseInt(employeeId, 10) });
+    ctx.state.session = updatedSession;
+
+    const finalSession = await dialog.setState(updatedSession, STATES.EMPLOYEE_DETAILS);
+    ctx.state.session = finalSession;
+
+    await ctx.answerCbQuery('✅ Сотрудник удален с объекта');
+    await runState(ctx, 'enter');
+  } catch (error) {
+    console.error('Error unassigning employee:', error);
+    await ctx.answerCbQuery('Ошибка при удалении сотрудника с объекта');
+  }
 });
 
 // object:edit - редактирование объекта

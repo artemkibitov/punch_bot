@@ -156,11 +156,32 @@ export class ObjectRepository {
   }
 
   /**
-   * Удаление объекта (для Admin)
+   * Удаление объекта (для Admin) - архивация
    */
   async delete(objectId, { adminId } = {}) {
     // Вместо физического удаления архивируем объект
-    return this.update(objectId, { status: 'ARCHIVED' }, { isAdmin: true });
+    const object = await this.findById(objectId, { isAdmin: true });
+    if (!object) {
+      throw new Error('Object not found');
+    }
+    
+    // Обновляем статус напрямую через SQL, так как update может требовать managerId
+    const { rows } = await this.pool.query(
+      `
+      UPDATE work_objects
+      SET status = 'ARCHIVED',
+          updated_at = now()
+      WHERE id = $1
+      RETURNING *
+      `,
+      [objectId]
+    );
+    
+    if (rows.length === 0) {
+      throw new Error('Object not found');
+    }
+    
+    return rows[0];
   }
 
   /**

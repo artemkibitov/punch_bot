@@ -83,6 +83,23 @@ export class EmployeeRepository {
   }
 
   /**
+   * Получение сотрудника по ID
+   */
+  async findById(employeeId) {
+    const { rows } = await this.pool.query(
+      `
+      SELECT e.*, r.code AS role
+      FROM employees e
+      JOIN roles r ON r.id = e.role_id
+      WHERE e.id = $1
+      `,
+      [employeeId]
+    );
+
+    return rows[0] || null;
+  }
+
+  /**
    * Поиск по ref_code
    */
   async findByRefCode(refCode) {
@@ -101,7 +118,7 @@ export class EmployeeRepository {
   }
 
   /**
-   * Привязка Telegram
+   * Привязка Telegram к сотруднику
    */
   async linkTelegram(employeeId, telegramUserId) {
     const { rows } = await this.pool.query(
@@ -194,16 +211,14 @@ export class EmployeeRepository {
 
   /**
    * Получение сотрудников менеджера
+   * Ищет всех сотрудников, созданных этим менеджером (по created_by)
    */
   async findByManagerId(managerId, { includeInactive = false } = {}) {
     let query = `
       SELECT DISTINCT e.*, r.code AS role
       FROM employees e
       JOIN roles r ON r.id = e.role_id
-      JOIN assignments a ON a.employee_id = e.id
-      JOIN work_objects wo ON wo.id = a.work_object_id
-      WHERE wo.manager_id = $1
-        AND a.unassigned_at IS NULL
+      WHERE e.created_by = $1
     `;
 
     const params = [managerId];

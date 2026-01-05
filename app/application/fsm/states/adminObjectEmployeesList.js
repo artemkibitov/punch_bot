@@ -1,6 +1,5 @@
 import { registerState } from '../registry.js';
 import { STATES } from '../../../domain/fsm/states.js';
-import { runState } from '../router.js';
 import { ObjectRepository } from '../../../infrastructure/repositories/objectRepository.js';
 import { EmployeeRepository } from '../../../infrastructure/repositories/employeeRepository.js';
 import { AssignmentRepository } from '../../../infrastructure/repositories/assignmentRepository.js';
@@ -13,7 +12,7 @@ const assignmentRepo = new AssignmentRepository();
 
 function formatEmployeesList(employees) {
   if (employees.length === 0) {
-    return 'На объекте пока нет сотрудников.\n\nДобавьте первого сотрудника через меню.';
+    return 'На объекте пока нет сотрудников.\n\nНажмите "Назначить сотрудника" чтобы добавить сотрудника на объект.';
   }
 
   let text = '👥 Сотрудники объекта:\n\n';
@@ -32,21 +31,21 @@ function formatEmployeesList(employees) {
 
 function employeesListKeyboard(employees, objectId) {
   const rows = employees.map((emp, index) => [
-    { text: `${index + 1}. ${emp.full_name}`, cb: `employee:details|${emp.id}` }
+    { text: `${index + 1}. ${emp.full_name}`, cb: `admin:employee:details|${emp.id}` }
   ]);
 
   rows.push([
-    { text: '➕ Назначить сотрудника', cb: `manager:object:employee:onboard|${objectId}` }
+    { text: '➕ Назначить сотрудника', cb: `admin:object:employee:onboard|${objectId}` }
   ]);
 
   rows.push([
-    { text: '⬅️ Назад к объекту', cb: `object:details|${objectId}` }
+    { text: '⬅️ Назад к объекту', cb: `admin:object:details|${objectId}` }
   ]);
 
   return keyboard(rows);
 }
 
-registerState(STATES.OBJECT_EMPLOYEES_LIST, {
+registerState(STATES.ADMIN_OBJECT_EMPLOYEES_LIST, {
   async onEnter(ctx) {
     const { session } = ctx.state;
     const objectId = session.data?.currentObjectId;
@@ -56,33 +55,27 @@ registerState(STATES.OBJECT_EMPLOYEES_LIST, {
       return;
     }
 
-    // Получаем manager
-    const manager = await employeeRepo.findByTelegramUserId(ctx.from.id);
-    if (!manager) {
-      await MessageService.sendOrEdit(ctx, 'Ошибка: менеджер не найден', {}, session);
-      return;
+    try {
+      // Проверяем права доступа (admin имеет доступ ко всем объектам)
+      const object = await objectRepo.findById(objectId, { isAdmin: true });
+      if (!object) {
+        await MessageService.sendOrEdit(ctx, 'Ошибка: объект не найден', {}, session);
+        return;
+      }
+
+      // Получаем сотрудников объекта
+      const employees = await assignmentRepo.findActiveByObjectId(objectId);
+
+      await MessageService.sendOrEdit(
+        ctx,
+        formatEmployeesList(employees),
+        employeesListKeyboard(employees, objectId),
+        session
+      );
+    } catch (error) {
+      console.error('Error fetching employees:', error);
+      await MessageService.sendOrEdit(ctx, 'Ошибка при загрузке сотрудников. Попробуйте позже.', {}, session);
     }
-
-    // Проверяем права доступа к объекту
-    const object = await objectRepo.findById(objectId, { 
-      managerId: manager.id, 
-      isAdmin: manager.role === 'ADMIN' 
-    });
-
-    if (!object) {
-      await MessageService.sendOrEdit(ctx, 'Ошибка: объект не найден или нет доступа', {}, session);
-      return;
-    }
-
-    // Получаем сотрудников объекта
-    const employees = await assignmentRepo.findActiveByObjectId(objectId);
-
-    await MessageService.sendOrEdit(
-      ctx,
-      formatEmployeesList(employees),
-      employeesListKeyboard(employees, objectId),
-      session
-    );
   }
 });
 

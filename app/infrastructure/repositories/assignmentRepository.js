@@ -9,11 +9,10 @@ export class AssignmentRepository {
    * Назначение сотрудника на объект
    */
   async assign({ employeeId, workObjectId, assignedBy }) {
-    // Проверяем, нет ли активного назначения
+    // Проверяем, не назначен ли уже сотрудник на этот объект
     const existing = await this.pool.query(
       `
-      SELECT id
-      FROM assignments
+      SELECT id FROM assignments
       WHERE employee_id = $1
         AND work_object_id = $2
         AND unassigned_at IS NULL
@@ -42,9 +41,9 @@ export class AssignmentRepository {
   }
 
   /**
-   * Снятие сотрудника с объекта
+   * Снятие сотрудника с объекта (soft delete через unassigned_at)
    */
-  async remove({ employeeId, workObjectId, removedBy }) {
+  async unassign({ employeeId, workObjectId, unassignedBy }) {
     const { rows } = await this.pool.query(
       `
       UPDATE assignments
@@ -58,7 +57,7 @@ export class AssignmentRepository {
     );
 
     if (rows.length === 0) {
-      throw new Error('Assignment not found or already removed');
+      throw new Error('Assignment not found or already unassigned');
     }
 
     return rows[0];
@@ -109,8 +108,7 @@ export class AssignmentRepository {
   async isAssigned(employeeId, workObjectId) {
     const { rows } = await this.pool.query(
       `
-      SELECT id
-      FROM assignments
+      SELECT id FROM assignments
       WHERE employee_id = $1
         AND work_object_id = $2
         AND unassigned_at IS NULL
@@ -121,4 +119,3 @@ export class AssignmentRepository {
     return rows.length > 0;
   }
 }
-
