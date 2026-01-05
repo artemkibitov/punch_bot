@@ -1,15 +1,12 @@
 import { registerState } from '../registry.js';
 import { STATES } from '../../../domain/fsm/states.js';
-import { ShiftRepository } from '../../../infrastructure/repositories/shiftRepository.js';
-import { WorkLogRepository } from '../../../infrastructure/repositories/workLogRepository.js';
 import { ObjectRepository } from '../../../infrastructure/repositories/objectRepository.js';
 import { EmployeeRepository } from '../../../infrastructure/repositories/employeeRepository.js';
 import { keyboard } from '../../../transport/telegram/ui/keyboard.js';
 import { MessageService } from '../../services/messageService.js';
 import { formatTime, formatWorkHours, calculateWorkHours, formatDate } from '../../services/shiftTimeService.js';
+import { container } from '../../../infrastructure/di/container.js';
 
-const shiftRepo = new ShiftRepository();
-const workLogRepo = new WorkLogRepository();
 const objectRepo = new ObjectRepository();
 const employeeRepo = new EmployeeRepository();
 
@@ -140,29 +137,23 @@ registerState(STATES.OBJECT_SHIFT_DETAILS, {
         return;
       }
 
-      // Получаем смену
-      const shift = await shiftRepo.findById(shiftId);
-      if (!shift || shift.work_object_id !== objectId) {
+      // Используем use case для получения деталей смены
+      const getShiftDetailsUseCase = await container.getAsync('GetShiftDetailsUseCase');
+      const { shift, workLogs } = await getShiftDetailsUseCase.execute(shiftId);
+
+      // Проверяем, что смена принадлежит объекту
+      if (shift.work_object_id !== objectId) {
         await MessageService.sendOrEdit(ctx, 'Ошибка: смена не найдена', {}, session);
         return;
       }
 
-      // Получаем work_logs смены
-      const workLogs = await workLogRepo.findByObjectShiftId(shiftId);
-
       // Отправляем шапку смены
       await MessageService.sendOrEdit(
         ctx,
-        formatShiftHeader(shift),
+        formatShiftDetails(shift, workLogs),
         shiftDetailsKeyboard(shift, objectId, workLogs),
         session
       );
-
-      // Отправляем детали сотрудников отдельным сообщением
-      if (workLogs.length > 0) {
-        const employeesDetails = formatShiftEmployees(workLogs);
-        await ctx.reply(employeesDetails);
-      }
     } catch (error) {
       console.error('Error fetching shift details:', error);
       await MessageService.sendOrEdit(ctx, 'Ошибка при загрузке смены. Попробуйте позже.', {}, session);

@@ -1,13 +1,12 @@
 import { registerState } from '../registry.js';
 import { STATES } from '../../../domain/fsm/states.js';
-import { ShiftRepository } from '../../../infrastructure/repositories/shiftRepository.js';
 import { ObjectRepository } from '../../../infrastructure/repositories/objectRepository.js';
 import { EmployeeRepository } from '../../../infrastructure/repositories/employeeRepository.js';
 import { keyboard } from '../../../transport/telegram/ui/keyboard.js';
 import { MessageService } from '../../services/messageService.js';
 import { formatTime } from '../../services/shiftTimeService.js';
+import { container } from '../../../infrastructure/di/container.js';
 
-const shiftRepo = new ShiftRepository();
 const objectRepo = new ObjectRepository();
 const employeeRepo = new EmployeeRepository();
 
@@ -107,12 +106,13 @@ registerState(STATES.OBJECT_SHIFTS_LIST, {
         return;
       }
 
-      // Получаем смены объекта (последние 30 дней)
+      // Используем use case для получения списка смен
+      const getShiftsListUseCase = await container.getAsync('GetShiftsListUseCase');
       const dateTo = new Date();
       const dateFrom = new Date();
       dateFrom.setDate(dateFrom.getDate() - 30);
       
-      const shifts = await shiftRepo.findByObjectId(objectId, {
+      const shifts = await getShiftsListUseCase.execute(objectId, {
         dateFrom: dateFrom.toISOString().split('T')[0],
         dateTo: dateTo.toISOString().split('T')[0]
       });

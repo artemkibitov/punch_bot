@@ -2,11 +2,10 @@ import { registerState } from '../registry.js';
 import { STATES } from '../../../domain/fsm/states.js';
 import { runState } from '../router.js';
 import { EmployeeRepository } from '../../../infrastructure/repositories/employeeRepository.js';
-import { AuditLogRepository } from '../../../infrastructure/repositories/auditLogRepository.js';
 import { MessageService } from '../../services/messageService.js';
+import { container } from '../../../infrastructure/di/container.js';
 
 const employeeRepo = new EmployeeRepository();
-const auditRepo = new AuditLogRepository();
 
 function requiredText(text) {
   if (!text || !text.trim()) {
@@ -60,23 +59,13 @@ registerState(STATES.MANAGER_EMPLOYEE_CREATE_ENTER_NAME, {
     }
 
     try {
-      // Создаём сотрудника
-      const employee = await employeeRepo.createEmployee({
+      // Используем use case для создания сотрудника
+      const createEmployeeUseCase = await container.getAsync('CreateEmployeeUseCase');
+      const { employee, refCode } = await createEmployeeUseCase.execute(
         fullName,
-        createdBy: manager.id
-      });
-
-      // Генерируем реферальную ссылку
-      const { refCode } = await employeeRepo.generateRefCode(employee.id, { expiresInHours: 168 }); // 7 дней
-
-      // Логируем в audit
-      await auditRepo.log({
-        entityType: 'employees',
-        entityId: employee.id,
-        action: 'create',
-        changedBy: manager.id,
-        metadata: { fullName, refCode }
-      });
+        manager.id,
+        { expiresInHours: 168 } // 7 дней
+      );
 
       // Возвращаемся к списку сотрудников менеджера
       const updatedSession = await dialog.setState(session, STATES.MANAGER_EMPLOYEES_LIST);

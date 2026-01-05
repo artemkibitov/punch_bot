@@ -1,12 +1,8 @@
 import { registerState } from '../registry.js';
 import { STATES } from '../../../domain/fsm/states.js';
 import { runState } from '../router.js';
-import { EmployeeRepository } from '../../../infrastructure/repositories/employeeRepository.js';
-import { AuditLogRepository } from '../../../infrastructure/repositories/auditLogRepository.js';
 import { MessageService } from '../../services/messageService.js';
-
-const employeeRepo = new EmployeeRepository();
-const auditRepo = new AuditLogRepository();
+import { container } from '../../../infrastructure/di/container.js';
 
 registerState(STATES.EMPLOYEE_REF_LINK_ACTIVATE, {
   async onEnter(ctx) {
@@ -23,44 +19,12 @@ registerState(STATES.EMPLOYEE_REF_LINK_ACTIVATE, {
       return;
     }
 
-    // Находим сотрудника по ref_code
-    const employee = await employeeRepo.findByRefCode(refCode);
-
-    if (!employee) {
-      await MessageService.sendOrEdit(
-        ctx,
-        '❌ Реферальная ссылка недействительна или истек срок действия.',
-        {},
-        session
-      );
-      return;
-    }
-
-    // Проверяем, не привязан ли уже Telegram
-    if (employee.telegram_user_id) {
-      await MessageService.sendOrEdit(
-        ctx,
-        '❌ Этот аккаунт уже привязан к другому Telegram аккаунту.',
-        {},
-        session
-      );
-      return;
-    }
-
     const telegramUserId = ctx.from.id;
 
     try {
-      // Привязываем Telegram
-      const updatedEmployee = await employeeRepo.linkTelegram(employee.id, telegramUserId);
-
-      // Логируем в audit
-      await auditRepo.log({
-        entityType: 'employees',
-        entityId: employee.id,
-        action: 'update',
-        changedBy: employee.id,
-        metadata: { field: 'telegram_user_id', telegramUserId, refCode }
-      });
+      // Используем use case для привязки Telegram
+      const linkTelegramUseCase = await container.getAsync('LinkTelegramUseCase');
+      const updatedEmployee = await linkTelegramUseCase.execute(refCode, telegramUserId);
 
       // Переходим в меню сотрудника
       const { dialog } = ctx.state;

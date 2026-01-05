@@ -1,13 +1,12 @@
 import { registerState } from '../registry.js';
 import { STATES } from '../../../domain/fsm/states.js';
-import { ShiftService } from '../../services/shiftService.js';
 import { ObjectRepository } from '../../../infrastructure/repositories/objectRepository.js';
 import { EmployeeRepository } from '../../../infrastructure/repositories/employeeRepository.js';
 import { keyboard } from '../../../transport/telegram/ui/keyboard.js';
 import { MessageService } from '../../services/messageService.js';
 import { formatWorkHours } from '../../services/shiftTimeService.js';
+import { container } from '../../../infrastructure/di/container.js';
 
-const shiftService = new ShiftService();
 const objectRepo = new ObjectRepository();
 const employeeRepo = new EmployeeRepository();
 
@@ -72,7 +71,8 @@ registerState(STATES.OBJECT_SHIFT_REPORT, {
         return;
       }
 
-      // Получаем отчет за последние 30 дней
+      // Используем use case для получения отчета
+      const getShiftReportUseCase = await container.getAsync('GetShiftReportUseCase');
       const dateTo = new Date();
       const dateFrom = new Date();
       dateFrom.setDate(dateFrom.getDate() - 30);
@@ -80,7 +80,7 @@ registerState(STATES.OBJECT_SHIFT_REPORT, {
       const dateFromStr = dateFrom.toISOString().split('T')[0];
       const dateToStr = dateTo.toISOString().split('T')[0];
 
-      const report = await shiftService.getObjectHoursReport(objectId, dateFromStr, dateToStr);
+      const report = await getShiftReportUseCase.execute(objectId, dateFromStr, dateToStr);
       
       // Сортируем по количеству часов (больше сначала)
       report.sort((a, b) => b.totalHours - a.totalHours);
